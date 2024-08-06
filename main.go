@@ -103,6 +103,7 @@ func main() {
 
 		e.Router.GET("/expand/html", func(c echo.Context) error {
 			q := c.QueryParam("q")
+
 			itemsResult := getItems(pb, q)
 			switch itemsResult.State {
 			case NEW_ITEM:
@@ -110,11 +111,11 @@ func main() {
 				return c.String(http.StatusOK, "ok")
 			case GOOGLE_MODE:
 				// This is a special shortcut
-				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args)
+				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args, c.Get(DEVICE_ID_CONTEXT_KEY).(string))
 				c.Response().Header().Set("HX-Redirect", itemsResult.Expansion.URL)
 				return c.String(http.StatusOK, "ok")
 			default:
-				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args)
+				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args, c.Get(DEVICE_ID_CONTEXT_KEY).(string))
 				c.Response().Header().Set("HX-Redirect", itemsResult.Expansion.URL)
 				return c.String(http.StatusOK, "ok")
 			}
@@ -128,10 +129,10 @@ func main() {
 				return c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/new?alias=%s", itemsResult.FirstQ))
 			case GOOGLE_MODE:
 				// This is a special shortcut
-				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args)
+				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args, c.Get(DEVICE_ID_CONTEXT_KEY).(string))
 				return c.Redirect(http.StatusTemporaryRedirect, itemsResult.Expansion.URL)
 			default:
-				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args)
+				createLog(pb, itemsResult.Expansion.Alias, itemsResult.Expansion.Args, c.Get(DEVICE_ID_CONTEXT_KEY).(string))
 				return c.Redirect(http.StatusTemporaryRedirect, itemsResult.Expansion.URL)
 			}
 		}, authMiddleware.Process)
@@ -177,7 +178,7 @@ func main() {
 		e.Router.POST("/login", func(c echo.Context) error {
 			c.Request().ParseForm()
 			cookie := new(http.Cookie)
-			cookie.Name = "links_auth"
+			cookie.Name = COOKIE_NAME
 			cookie.Value = c.FormValue("token")
 			cookie.Expires = time.Now().Add(60 * 24 * time.Hour)
 			c.SetCookie(cookie)
@@ -200,6 +201,11 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+const (
+	DEVICE_ID_CONTEXT_KEY = "device_id"
+	COOKIE_NAME           = "links_auth"
+)
 
 type Item struct {
 	Name  string   `db:"name" form:"name"`
@@ -291,7 +297,7 @@ func createItem(pb *pocketbase.PocketBase, item Item) error {
 	return nil
 }
 
-func createLog(pb *pocketbase.PocketBase, alias string, args []string) error {
+func createLog(pb *pocketbase.PocketBase, alias string, args []string, deviceId string) error {
 	collection, err := pb.Dao().FindCollectionByNameOrId("logs")
 	if err != nil {
 		return err
@@ -299,6 +305,7 @@ func createLog(pb *pocketbase.PocketBase, alias string, args []string) error {
 	record := models.NewRecord(collection)
 	record.Set("alias", alias)
 	record.Set("args", args)
+	record.Set("device", deviceId)
 	if err := pb.Dao().SaveRecord(record); err != nil {
 		return err
 	}
@@ -415,26 +422,29 @@ type AuthMiddleware struct {
 	pb *pocketbase.PocketBase
 }
 
-type User struct {
-	ID string `db:"id"`
+type Device struct {
+	ID    string `db:"id"`
+	Token string `db:"token"`
 }
 
 func (m *AuthMiddleware) Process(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		cookie, err := c.Cookie("links_auth")
+		cookie, err := c.Cookie(COOKIE_NAME)
 		if err != nil {
 			return c.String(http.StatusOK, "")
 		}
-		users := []User{}
+		devices := []Device{}
 		m.pb.Dao().DB().
-			NewQuery("SELECT id FROM users WHERE id = {:id}").
+			NewQuery("SELECT id, token FROM devices WHERE token = {:token}").
 			Bind(dbx.Params{
-				"id": cookie.Value,
+				"token": cookie.Value,
 			}).
-			All(&users)
-		if len(users) != 1 {
+			All(&devices)
+		fmt.Println(devices)
+		if len(devices) != 1 {
 			return c.String(http.StatusOK, "")
 		}
+		c.Set(DEVICE_ID_CONTEXT_KEY, devices[0].ID)
 		return next(c)
 	}
 }
