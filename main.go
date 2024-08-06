@@ -440,7 +440,6 @@ func (m *AuthMiddleware) Process(next echo.HandlerFunc) echo.HandlerFunc {
 				"token": cookie.Value,
 			}).
 			All(&devices)
-		fmt.Println(devices)
 		if len(devices) != 1 {
 			return c.String(http.StatusOK, "")
 		}
