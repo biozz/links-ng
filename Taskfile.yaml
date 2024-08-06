@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  deps:
+    cmds:
+      - go mod tidy
+      - go mod vendor
+
+  build:
+    cmds:
+      - CGO_ENABLED=0 go build -o ./tmp/links main.go
+
+  run:
+    deps: [build]
+    cmds:
+      - ./tmp/links serve --dir=pb_data --dev
+
+  dev:
+    sources:
+      - '**/*.go'
+    deps: [run]
+

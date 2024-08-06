@@ -1,0 +1,6 @@
+{{ define "content" }}
+<form hx-post="/login" hx-trigger="submit" class="form">
+    <input type="text" name="token" placeholder="Token" class="input" required>
+    <input type="submit" class="hidden" />
+</form>
+{{ end }}

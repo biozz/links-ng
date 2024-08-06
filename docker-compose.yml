@@ -1,0 +1,8 @@
+services:
+  links:
+    build: .
+    command: "serve --dir=/app/pb_data --http=0.0.0.0:8080"
+    volumes:
+      - "./pb_data:/app/pb_data"
+    ports:
+      - "8080:8080"

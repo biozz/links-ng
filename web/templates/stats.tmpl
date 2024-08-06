@@ -1,0 +1,24 @@
+{{ define "stats" }}
+<div class="stats-container__category"> 
+  <h3>Most popular</h3>
+  <ul>
+    {{ range .topn }}
+    <li
+      class="text-sm"
+      x-on:click="search = '{{ .Alias }}'; $nextTick(() => { $dispatch('use'); $refs.input.focus(); })"
+    >{{ .Count }} {{ .Alias }}</li>
+    {{ end }}
+  </ul>
+</div>
+<div class="stats-container__category">
+  <h3 class="mt-2">Least popular</h3>
+  <ul>
+    {{ range .lown }}
+    <li
+      class="text-sm"
+      x-on:click="search = '{{ .Alias }}'; $nextTick(() => { $dispatch('use'); $refs.input.focus(); })"
+    >{{ .Count }} {{ .Alias }}</li>
+    {{ end }}
+  </ul>
+</div>
+{{ end }}

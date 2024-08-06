@@ -1,0 +1,42 @@
+{{ define "items" }} 
+{{ if .New }}
+  <p><b>{{ .New }}</b> doesn't exist, <b>⮐ </b> to create</p>
+{{ end }}
+<ul class="items__list">
+  {{ range .Items }}
+  <li class="items__list__element" x-on:click="search = '{{ .Alias }} '; $nextTick(() => { $dispatch('use'); $refs.input.focus(); }); ">
+    <div
+      class="items__list__element__avatar"
+    >
+      <span class="font-bold">{{ printf "%.5s" .Alias }}</span>
+    </div>
+    <div class="items__list__element__content">
+      <div>
+      <span class="text-sm">{{ .Name }}</span>
+      <br />
+      <span class="text-xs">{{ printf "%.50s" .URL }}</span>
+      </div>
+    </div>
+  </li>
+  {{ end }}
+</ul>
+{{ if .Expansion.URL }}
+  <div class="items__expansion">
+    <div
+      contenteditable
+      class="items__expansion__editable"
+    >{{ .Expansion.URL }}</div>
+    <p>
+      <a
+        href="{{ .Expansion.URL }}"
+        target="_blank"
+        class="items__expansion__clickable"
+        x-init="expandURL = '{{ .Expansion.ExpandURL }}'"
+      >
+        Click or <b>Ctrl+⮐ </b> to open in a new tab
+      </a>
+    </p>
+    <p><b>⮐ </b> open in a current tab</p>
+  </div>
+{{ end }}
+{{ end }}

@@ -1,0 +1,36 @@
+{{ define "content" }}
+  <div class="search-container">
+    <form hx-get="/expand/html" hx-trigger="submit" class="search-container__form">
+      <input
+        hx-get="/items"
+        hx-trigger="use from:body"
+        hx-target="#items"
+        x-model="search"
+        x-ref="input"
+        @keyup.debounce="$dispatch('use')"
+        @keyup.esc.prevent="search = ''; $nextTick(() => { $dispatch('use'); $refs.input.focus() })"
+        @keydown.ctrl.enter.prevent="window.open(expandURL, '_blank'); $nextTick(() => { $dispatch('expand') })"
+        name="q"
+        type="text"
+        class="search-container__form__input"
+        autocomplete="off"
+      />
+    </form>
+    <div hx-get="/items" hx-trigger="load" class="search-container__items" id="items"></div>
+  </div>
+  <div class="logs-container">
+    <div
+      hx-get="/logs"
+      hx-trigger="load, expand from:body delay:1s"
+      id="logs"
+    ></div>
+  </div>
+  <div class="stats-container">
+    <div
+      hx-get="/stats"
+      hx-trigger="load, expand from:body delay:500ms"
+      id="stats"
+      class="stats-container__toplow"
+    ></div>
+  </div>
+{{ end }}

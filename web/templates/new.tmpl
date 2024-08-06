@@ -1,0 +1,9 @@
+{{ define "content" }}
+<form class="form" hx-post="/items" hx-trigger="submit">
+    <input type="text" name="name" placeholder="Name" class="input" />
+    <input type="text" name="alias" value="{{ . }}" placeholder="Alias" class="input" />
+    <input type="text" name="url" placeholder="URL" class="input" />
+    <input type="text" name="tags" placeholder="Tags" class="input" />
+    <input type="submit" class="hidden" />
+</form>
+{{ end }}

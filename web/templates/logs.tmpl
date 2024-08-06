@@ -1,0 +1,22 @@
+{{ define "logs" }}
+<table class="logs-table">
+  <thead>
+    <tr>
+      <th>Timestamp</th>
+      <th>Alias</th>
+      <th>Args</th>
+    </tr>
+  </thead>
+<tbody>
+    {{ range . }}
+    <tr
+      x-on:click="search = '{{ .Alias }} {{ .Args }}'; $nextTick(() => { $dispatch('use'); $refs.input.focus(); })"
+    >
+        <td>{{ .CreatedAt }}</td>
+        <td>{{ .Alias }}</td>
+        <td>{{ .Args }}</td>
+    </tr>
+    {{ end }}
+</tbody>
+</table>
+{{ end }}
