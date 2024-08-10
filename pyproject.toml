@@ -1,0 +1,9 @@
+[project]
+dependencies = [
+  "streamlit",
+  "SQLAlchemy",
+  "altair",
+]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
