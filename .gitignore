@@ -1,3 +1,5 @@
 pb_data/
 tmp/
 .task/
+.python-version
+.envrc

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"text/template"
@@ -67,6 +68,10 @@ func main() {
 				return tmpls.Render(c.Response().Writer, "items", ctx, c)
 			case ARGS_MODE:
 				ctx.Expansion = itemsResult.Expansion
+				return tmpls.Render(c.Response().Writer, "items", ctx, c)
+			case GOOGLE_MODE:
+				ctx.Expansion = itemsResult.Expansion
+				ctx.IsGoogle = true
 				return tmpls.Render(c.Response().Writer, "items", ctx, c)
 			default:
 				return tmpls.Render(c.Response().Writer, "items", ctx, c)
@@ -225,6 +230,7 @@ type ItemsContext struct {
 	New       string
 	Expansion Expansion
 	Items     []Item
+	IsGoogle  bool
 }
 
 type Log struct {
@@ -389,24 +395,29 @@ func getItems(pb *pocketbase.PocketBase, q string) ItemsResult {
 		items = getItemsByPrefix(pb, qParts[0])
 	}
 
-	result.Items = items
-	result.State = MULTIPLE_ITEMS
-	result.Expansion = expand(items[0], q)
-
 	if len(items) == 0 {
 		if len(qParts) > 1 {
 			result.State = GOOGLE_MODE
+			googleQ := strings.Join(qParts, " ")
+			if qParts[0] == "g" {
+				googleQ = strings.Join(qParts[1:], " ")
+			}
+			googleQ = url.QueryEscape(googleQ)
 			result.Expansion = Expansion{
 				Alias:     "g",
 				Args:      qParts[1:],
-				URL:       "https://google.com/search?q=" + strings.Join(qParts[1:], "+"),
-				ExpandURL: fmt.Sprintf("%s/api/expand?q=%s", appURL, q),
+				URL:       "https://google.com/search?q=" + googleQ,
+				ExpandURL: fmt.Sprintf("%s/api/expand?q=%s", appURL, googleQ),
 			}
 			return result
 		}
 		result.State = NEW_ITEM
 		return result
 	}
+
+	result.Items = items
+	result.State = MULTIPLE_ITEMS
+	result.Expansion = expand(items[0], q)
 
 	if len(qParts) > 1 && len(items) > 0 {
 		result.State = ARGS_MODE

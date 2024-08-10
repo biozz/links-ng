@@ -26,6 +26,9 @@
       contenteditable
       class="items__expansion__editable"
     >{{ .Expansion.URL }}</div>
+    {{ if .IsGoogle }}
+    <p>There are no aliases with that prefix, treating it like a google query</p>
+    {{ end }}
     <p>
       <a
         href="{{ .Expansion.URL }}"
