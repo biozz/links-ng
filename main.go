@@ -126,6 +126,12 @@ func main() {
 			}
 		}, authMiddleware.Process)
 
+		e.Router.GET("/api/items", func(c echo.Context) error {
+			q := c.Request().URL.Query().Get("q")
+			itemsResult := getItems(pb, q)
+			return c.JSON(http.StatusOK, itemsResult.Items)
+		})
+
 		e.Router.GET("/api/expand", func(c echo.Context) error {
 			q := c.QueryParam("q")
 			itemsResult := getItems(pb, q)
@@ -213,10 +219,10 @@ const (
 )
 
 type Item struct {
-	Name  string   `db:"name" form:"name"`
-	Alias string   `db:"alias" form:"alias"`
-	URL   string   `db:"url" form:"url"`
-	Tags  []string `form:"tags"`
+	Name  string   `db:"name" form:"name" json:"name"`
+	Alias string   `db:"alias" form:"alias" json:"alias"`
+	URL   string   `db:"url" form:"url" json:"url"`
+	Tags  []string `form:"tags" json:"tags"`
 }
 
 type Expansion struct {
