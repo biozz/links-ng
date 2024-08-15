@@ -274,9 +274,10 @@ func expand(item Item, q string) Expansion {
 func getItemsByPrefix(pb *pocketbase.PocketBase, prefix string) []Item {
 	items := make([]Item, 0)
 	pb.Dao().DB().
-		NewQuery("SELECT alias, name, url FROM items WHERE alias LIKE {:like} ORDER BY alias LIKE {:like}, created ASC LIMIT 10").
+		NewQuery("SELECT alias, name, url FROM items WHERE alias LIKE {:like} ORDER BY (CASE WHEN alias = {:prefix} THEN 1 WHEN alias LIKE {:like} THEN 2 ELSE 3 END), alias, created ASC LIMIT 10").
 		Bind(dbx.Params{
-			"like": prefix + "%",
+			"prefix": prefix,
+			"like":   prefix + "%",
 		}).
 		All(&items)
 	return items
