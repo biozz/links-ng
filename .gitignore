@@ -3,3 +3,4 @@ tmp/
 .task/
 .python-version
 .envrc
+__pycache__/

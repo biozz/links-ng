@@ -22,5 +22,5 @@ tasks:
 
   streamlit:
     cmds:
-      - streamlit run streamlit.py --server.headless=true
+      - uv run app.py
 
