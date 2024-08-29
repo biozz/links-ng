@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/biozz/links/web"
@@ -37,11 +36,11 @@ func main() {
 		e.Router.GET("/static/*", apis.StaticDirectoryHandler(fsys, false))
 
 		e.Router.GET("/", func(c echo.Context) error {
-			return tmpls.Render(c.Response().Writer, "index", nil, c)
+			return tmpls.RenderEcho(c.Response().Writer, "index", nil, c)
 		}, authMiddleware.Process)
 
 		e.Router.GET("/new", func(c echo.Context) error {
-			return tmpls.Render(c.Response().Writer, "new", c.Request().URL.Query().Get("alias"), c)
+			return tmpls.RenderEcho(c.Response().Writer, "new", c.Request().URL.Query().Get("alias"), c)
 		}, authMiddleware.Process)
 
 		e.Router.POST("/items", func(c echo.Context) error {
@@ -65,16 +64,16 @@ func main() {
 			switch itemsResult.State {
 			case NEW_ITEM:
 				ctx.New = itemsResult.FirstQ
-				return tmpls.Render(c.Response().Writer, "items", ctx, c)
+				return tmpls.RenderEcho(c.Response().Writer, "items", ctx, c)
 			case ARGS_MODE:
 				ctx.Expansion = itemsResult.Expansion
-				return tmpls.Render(c.Response().Writer, "items", ctx, c)
+				return tmpls.RenderEcho(c.Response().Writer, "items", ctx, c)
 			case GOOGLE_MODE:
 				ctx.Expansion = itemsResult.Expansion
 				ctx.IsGoogle = true
-				return tmpls.Render(c.Response().Writer, "items", ctx, c)
+				return tmpls.RenderEcho(c.Response().Writer, "items", ctx, c)
 			default:
-				return tmpls.Render(c.Response().Writer, "items", ctx, c)
+				return tmpls.RenderEcho(c.Response().Writer, "items", ctx, c)
 			}
 		}, authMiddleware.Process)
 
@@ -94,7 +93,7 @@ func main() {
 					CreatedAt: log.CreatedAt.Time().Format("2006-01-02 15:04:05"),
 				}
 			}
-			return tmpls.Render(c.Response().Writer, "logs", logsContext, c)
+			return tmpls.RenderEcho(c.Response().Writer, "logs", logsContext, c)
 		}, authMiddleware.Process)
 
 		e.Router.GET("/stats", func(c echo.Context) error {
@@ -103,7 +102,7 @@ func main() {
 			result := make(map[string]interface{})
 			result["topn"] = topN
 			result["lown"] = lowN
-			return tmpls.Render(c.Response().Writer, "stats", result, c)
+			return tmpls.RenderEcho(c.Response().Writer, "stats", result, c)
 		}, authMiddleware.Process)
 
 		e.Router.GET("/expand/html", func(c echo.Context) error {
@@ -149,6 +148,7 @@ func main() {
 		}, authMiddleware.Process)
 
 		e.Router.GET("/api/opensearch", func(c echo.Context) error {
+			// TODO: possibly parse `format` GET-parameter and output differently, i.e. in XML
 			q := c.QueryParam("q")
 			qParts := strings.Split(q, " ")
 			itemsResult := getItems(pb, q)
@@ -166,24 +166,28 @@ func main() {
 				// []string{"https://google.com/?q=asdf"},
 			}
 			return c.JSON(http.StatusOK, result)
-		}, authMiddleware.Process)
+		})
 
 		e.Router.GET("/opensearch.xml", func(c echo.Context) error {
+			// https://github.com/dewitt/opensearch/blob/master/opensearch-1-1-draft-6.md
+			// TODO:
+			// 	- add more response formats
+			// 	<Url type="application/atom+xml" template="{{ .BaseURL }}/?q={searchTerms}&amp;format=atom"/>
+			// 	<Url type="application/rss+xml" template="{{ .BaseURL }}/?q={searchTerms}&amp;pw={startPage?}&amp;format=rss"/>
+
 			appUrl := pb.Settings().Meta.AppUrl
-			tmpl, err := template.New("opensearch.xml").Parse(opensearchXML)
+			var output bytes.Buffer
+			err := tmpls.Execute(&output, "opensearch", map[string]string{"BaseURL": appUrl})
 			if err != nil {
 				return err
 			}
-			var output bytes.Buffer
-			if err := tmpl.Execute(&output, map[string]string{"BaseURL": appUrl}); err != nil {
-				return err
-			}
 			c.Response().Header().Set("Content-Type", "application/opensearchdescription+xml")
-			return c.Blob(http.StatusOK, "application/octet-stream", output.Bytes())
-		}, authMiddleware.Process)
+			return c.XMLBlob(http.StatusOK, output.Bytes())
+			// not using AuthMiddleware, because Firefox can't download the search engine definition otherwise.
+		})
 
 		e.Router.GET("/login", func(c echo.Context) error {
-			return tmpls.Render(c.Response().Writer, "login", nil, c)
+			return tmpls.RenderEcho(c.Response().Writer, "login", nil, c)
 		})
 
 		e.Router.POST("/login", func(c echo.Context) error {
@@ -347,21 +351,6 @@ func getTopAliases(pb *pocketbase.PocketBase, limit int64) ([]TopAlias, error) {
 		All(&aliases)
 	return aliases, nil
 }
-
-// https://github.com/dewitt/opensearch/blob/master/opensearch-1-1-draft-6.md
-var opensearchXML string = `
-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"
-                       xmlns:moz="http:/www.mozilla.org/2006/browser/search/">
-  <ShortName>Links</ShortName>
-  <InputEncoding>UTF-8</InputEncoding>
-  <Description>Just a bunch of links.</Description>
-  <Tags>links</Tags>
-  <Contact>ielfimov@gmail.com</Contact>
-  <Url type="text/html" method="get" template="{{ .BaseURL }}/api/expand?q={searchTerms}" />
-  <Url type="application/x-suggestions+json" rel="suggestions" template="{{ .BaseURL }}/api/opensearch?q={searchTerms}" />
-  <moz:SearchForm>{{ .BaseURL }}</moz:SearchForm>
-</OpenSearchDescription>
-`
 
 type ItemsState uint8
 

@@ -1,0 +1,20 @@
+{{define "opensearch"}}
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"
+                       xmlns:moz="http:/www.mozilla.org/2006/browser/search/">
+  <ShortName>Links</ShortName>
+  <LongName>Links Search Tool</LongName>
+  <InputEncoding>UTF-8</InputEncoding>
+  <Description>An alias-based boormarking and productivity tool.</Description>
+  <Tags>links bookmarks productivity</Tags>
+  <Contact>ielfimov@gmail.com</Contact>
+  <Url type="text/html" method="get" template="{{ .BaseURL }}/api/expand?q={searchTerms}" />
+  <Url rel="suggestions" type="application/x-suggestions+json" template="{{ .BaseURL }}/api/opensearch?q={searchTerms}" />
+  <moz:SearchForm>{{ .BaseURL }}</moz:SearchForm>
+  <Developer>https://github.com/biozz</Developer>
+  <SyndicationRight>open</SyndicationRight>
+  <AdultContent>false</AdultContent>
+  <Language>en-us</Language>
+  <OutputEncoding>UTF-8</OutputEncoding>
+  <InputEncoding>UTF-8</InputEncoding>
+</OpenSearchDescription>
+{{ end }}

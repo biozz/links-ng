@@ -35,18 +35,19 @@ func NewTemplates(dev bool) *Templates {
 
 func (t *Templates) Must() {
 	t.templates = map[string]*template.Template{
-		"index": template.Must(template.New("").ParseFS(t.fsys, "index.tmpl", "layout.tmpl")),
-		"items": template.Must(template.New("").ParseFS(t.fsys, "items.tmpl")),
-		"logs":  template.Must(template.New("").ParseFS(t.fsys, "logs.tmpl")),
-		"stats": template.Must(template.New("").ParseFS(t.fsys, "stats.tmpl")),
-		"new":   template.Must(template.New("").ParseFS(t.fsys, "new.tmpl", "layout.tmpl")),
-		"login": template.Must(template.New("").ParseFS(t.fsys, "login.tmpl", "layout.tmpl")),
+		"index":      template.Must(template.New("").ParseFS(t.fsys, "index.html.tmpl", "layout.html.tmpl")),
+		"items":      template.Must(template.New("").ParseFS(t.fsys, "items.html.tmpl")),
+		"logs":       template.Must(template.New("").ParseFS(t.fsys, "logs.html.tmpl")),
+		"stats":      template.Must(template.New("").ParseFS(t.fsys, "stats.html.tmpl")),
+		"new":        template.Must(template.New("").ParseFS(t.fsys, "new.html.tmpl", "layout.html.tmpl")),
+		"login":      template.Must(template.New("").ParseFS(t.fsys, "login.html.tmpl", "layout.html.tmpl")),
+		"opensearch": template.Must(template.New("").ParseFS(t.fsys, "opensearch.xml.tmpl")),
 	}
 }
 
 var errTemplateNotFound = errors.New("template not found")
 
-func (t *Templates) Render(
+func (t *Templates) RenderEcho(
 	w io.Writer,
 	name string,
 	data interface{},
@@ -59,9 +60,24 @@ func (t *Templates) Render(
 	if !ok {
 		return errTemplateNotFound
 	}
-	layout := tmpl.Lookup("layout.tmpl")
+	layout := tmpl.Lookup("layout.html.tmpl")
 	if layout == nil {
 		return tmpl.ExecuteTemplate(w, name, data)
 	}
 	return tmpl.ExecuteTemplate(w, "layout", data)
+}
+
+func (t *Templates) Execute(
+	w io.Writer,
+	name string,
+	data interface{},
+) error {
+	if t.dev {
+		t.Must()
+	}
+	tmpl, ok := t.templates[name]
+	if !ok {
+		return errTemplateNotFound
+	}
+	return tmpl.ExecuteTemplate(w, name, data)
 }
