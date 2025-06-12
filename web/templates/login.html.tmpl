@@ -1,7 +1,8 @@
 {{ define "content" }}
 <form hx-post="/login" hx-trigger="submit" class="form">
-  <p>Go to <a href="/_/">admin interface</a> and copy device token.</p>
-  <input type="text" name="token" placeholder="Token" class="input" required>
+  <p>Go to <a href="/_/">admin interface</a> and copy device token and device ID.</p>
+  <input type="text" name="device_id" placeholder="Device ID" class="input" required>
+  <input type="password" name="token" placeholder="Token" class="input" required>
   <button type="submit">Login</button>
 </form>
 {{ end }}

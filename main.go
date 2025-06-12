@@ -130,9 +130,25 @@ func main() {
 
 		se.Router.POST("/login", func(e *core.RequestEvent) error {
 			e.Request.ParseForm()
+			deviceID := e.Request.FormValue("device_id")
+			token := e.Request.FormValue("token")
+
+			devices := []Device{}
+			e.App.DB().
+				NewQuery("SELECT id, token FROM devices WHERE id = {:device_id} AND token = {:token}").
+				Bind(dbx.Params{
+					"device_id": deviceID,
+					"token":     token,
+				}).
+				All(&devices)
+
+			if len(devices) != 1 {
+				return e.String(http.StatusUnauthorized, "Invalid device ID or token")
+			}
+
 			cookie := new(http.Cookie)
 			cookie.Name = COOKIE_NAME
-			cookie.Value = e.Request.FormValue("token")
+			cookie.Value = token
 			cookie.Expires = time.Now().Add(60 * 24 * time.Hour)
 			e.SetCookie(cookie)
 			e.Response.Header().Set("HX-Redirect", "/")
@@ -219,6 +235,44 @@ func main() {
 				// []string{"https://google.com/?q=asdf"},
 			}
 			return e.JSON(http.StatusOK, result)
+		}).BindFunc(authMiddleware.API)
+
+		// New unified search endpoint
+		se.Router.GET("/api/search", func(e *core.RequestEvent) error {
+			q := e.Request.URL.Query().Get("q")
+			action := e.Request.URL.Query().Get("action")
+			deviceId := e.Get(DEVICE_ID_CONTEXT_KEY).(string)
+
+			itemsResult := getItems(app, q)
+
+			switch action {
+			case "expand":
+				switch itemsResult.State {
+				case NEW_ITEM:
+					return e.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/new?alias=%s", itemsResult.FirstQ))
+				case GOOGLE_MODE:
+					// This is a special shortcut
+					createLog(app, itemsResult.Expansion.Alias, itemsResult.Expansion.Args, deviceId)
+					return e.Redirect(http.StatusTemporaryRedirect, itemsResult.Expansion.URL)
+				default:
+					createLog(app, itemsResult.Expansion.Alias, itemsResult.Expansion.Args, deviceId)
+					return e.Redirect(http.StatusTemporaryRedirect, itemsResult.Expansion.URL)
+				}
+			case "suggest":
+				qParts := strings.Split(q, " ")
+				suggestions := make([]string, len(itemsResult.Items))
+				for i := 0; i < len(itemsResult.Items); i++ {
+					expansion := expand(itemsResult.Items[i], q)
+					suggestions[i] = fmt.Sprintf("%s %s %s", itemsResult.Items[i].Alias, qParts[:1], expansion.URL)
+				}
+				result := []interface{}{
+					q,
+					suggestions,
+				}
+				return e.JSON(http.StatusOK, result)
+			default:
+				return e.String(http.StatusBadRequest, "invalid action")
+			}
 		}).BindFunc(authMiddleware.API)
 
 		se.Router.GET("/opensearch.xml", func(e *core.RequestEvent) error {
@@ -406,10 +460,10 @@ type ItemsState uint8
 
 const (
 	UNKNOWN        ItemsState = 0
-	MULTIPLE_ITEMS            = 1
-	NEW_ITEM                  = 2
-	ARGS_MODE                 = 3
-	GOOGLE_MODE               = 4
+	MULTIPLE_ITEMS ItemsState = 1
+	NEW_ITEM       ItemsState = 2
+	ARGS_MODE      ItemsState = 3
+	GOOGLE_MODE    ItemsState = 4
 )
 
 type ItemsResult struct {
@@ -453,7 +507,7 @@ func getItems(app *pocketbase.PocketBase, q string) ItemsResult {
 				Alias:     "g",
 				Args:      qParts[1:],
 				URL:       "https://google.com/search?q=" + googleQ,
-				ExpandURL: fmt.Sprintf("%s/api/expand?q=%s", appURL, googleQ),
+				ExpandURL: fmt.Sprintf("%s/api/search?q=%s&action=expand", appURL, googleQ),
 			}
 			return result
 		}
@@ -468,7 +522,7 @@ func getItems(app *pocketbase.PocketBase, q string) ItemsResult {
 	if len(qParts) > 1 && len(items) > 0 {
 		result.State = ARGS_MODE
 		result.Expansion = expand(items[0], q)
-		result.Expansion.ExpandURL = fmt.Sprintf("%s/api/expand?q=%s", appURL, q)
+		result.Expansion.ExpandURL = fmt.Sprintf("%s/api/search?q=%s&action=expand", appURL, q)
 		return result
 	}
 
@@ -513,18 +567,20 @@ func (m *AuthMiddleware) Frontend(e *core.RequestEvent) error {
 
 func (m *AuthMiddleware) API(e *core.RequestEvent) error {
 	token := e.Request.URL.Query().Get("t")
-	if token == "" {
-		return e.String(http.StatusOK, "no token")
+	deviceID := e.Request.URL.Query().Get("id")
+	if token == "" || deviceID == "" {
+		return e.String(http.StatusUnauthorized, "missing token or id")
 	}
 	devices := []Device{}
 	m.app.DB().
-		NewQuery("SELECT id, token FROM devices WHERE token = {:token}").
+		NewQuery("SELECT id, token FROM devices WHERE id = {:id} AND token = {:token}").
 		Bind(dbx.Params{
+			"id":    deviceID,
 			"token": token,
 		}).
 		All(&devices)
 	if len(devices) != 1 {
-		return e.String(http.StatusOK, "")
+		return e.String(http.StatusUnauthorized, "invalid token or id")
 	}
 	e.Set(DEVICE_ID_CONTEXT_KEY, devices[0].ID)
 	return e.Next()

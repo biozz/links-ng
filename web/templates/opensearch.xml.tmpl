@@ -7,8 +7,8 @@
   <Description>An alias-based boormarking and productivity tool.</Description>
   <Tags>links bookmarks productivity</Tags>
   <Contact>ielfimov@gmail.com</Contact>
-  <Url type="text/html" method="get" template="{{ .BaseURL }}/api/expand?q={searchTerms}" />
-  <Url rel="suggestions" type="application/x-suggestions+json" template="{{ .BaseURL }}/api/opensearch?q={searchTerms}" />
+  <Url type="text/html" method="get" template="{{ .BaseURL }}/api/search?action=expand&q={searchTerms}" />
+  <Url rel="suggestions" type="application/x-suggestions+json" template="{{ .BaseURL }}/api/search?action=suggest&q={searchTerms}" />
   <moz:SearchForm>{{ .BaseURL }}</moz:SearchForm>
   <Developer>https://github.com/biozz</Developer>
   <SyndicationRight>open</SyndicationRight>

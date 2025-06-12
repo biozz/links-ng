@@ -6,9 +6,9 @@
 
 <ul>
   <li>Search engine name:<br />Links</li>
-  <li>URL with %s in place of search term:<br /><pre>{{ .AppURL }}/api/expand?t={{ .Token }}&q=%s</pre></li>
+  <li>URL with %s in place of search term:<br /><pre>{{ .AppURL }}/api/search?action=expand&id={{ .DeviceID }}&t={{ .Token }}&q=%s</pre></li>
   <li>Keyword (optional):<br />links</li>
-  <li>Suggestions URL with %s in place of search term (optional):<br /><pre>{{ .AppURL}}/api/opensearch?t={{ .Token }}&q=%s</pre></li>
+  <li>Suggestions URL with %s in place of search term (optional):<br /><pre>{{ .AppURL}}/api/search?action=suggest&id={{ .DeviceID }}&t={{ .Token }}&q=%s</pre></li>
 </ul>
 
 <p>Now select "Links" as your default search engine and you are good to go!</p>
@@ -17,7 +17,7 @@
 
 <p>Chromium-based browsers allow you to set only the expand URL. Go to search settings and new search enging with the following url:</p>
 
-<pre>{{ .AppURL }}/api/expand?t={{ .Token }}&q=%s</pre>
+<pre>{{ .AppURL }}/api/search?action=expand&id={{ .DeviceID }}&t={{ .Token }}&q=%s</pre>
 
 <h2>Others</h2>
 
