@@ -107,7 +107,7 @@ func main() {
 		se.Router.GET("/stats", func(e *core.RequestEvent) error {
 			topN, _ := getTopAliases(app, 10)
 			lowN, _ := getTopAliases(app, -10)
-			result := make(map[string]interface{})
+			result := make(map[string]any)
 			result["topn"] = topN
 			result["lown"] = lowN
 			return tmpls.RenderEcho(e.Response, "stats", result, e)
@@ -226,7 +226,7 @@ func main() {
 				expansion := expand(itemsResult.Items[i], q)
 				suggestions[i] = fmt.Sprintf("%s %s %s", itemsResult.Items[i].Alias, qParts[:1], expansion.URL)
 			}
-			result := []interface{}{
+			result := []any{
 				q,
 				suggestions,
 				// This doesn't work, dunno why is it in a specification
@@ -265,7 +265,7 @@ func main() {
 					expansion := expand(itemsResult.Items[i], q)
 					suggestions[i] = fmt.Sprintf("%s %s %s", itemsResult.Items[i].Alias, qParts[:1], expansion.URL)
 				}
-				result := []interface{}{
+				result := []any{
 					q,
 					suggestions,
 				}

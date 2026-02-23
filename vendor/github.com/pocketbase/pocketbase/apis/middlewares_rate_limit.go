@@ -1,6 +1,7 @@
 package apis
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -167,7 +168,7 @@ func checkRateLimit(e *core.RequestEvent, rtId string, rule core.RateLimitRule) 
 	}
 
 	if !rt.isAllowed(key) {
-		return e.TooManyRequestsError("", nil)
+		return e.TooManyRequestsError("", errors.New("triggered rate limit rule: "+rule.String()))
 	}
 
 	return nil
@@ -233,12 +234,12 @@ func newRateLimiter(maxAllowed int, intervalInSec int64, minDeleteIntervalInSec 
 		maxAllowed:        maxAllowed,
 		interval:          intervalInSec,
 		minDeleteInterval: minDeleteIntervalInSec,
-		clients:           map[string]*fixedWindow{},
+		clients:           map[string]*rateClient{},
 	}
 }
 
 type rateLimiter struct {
-	clients map[string]*fixedWindow
+	clients map[string]*rateClient
 
 	maxAllowed        int
 	interval          int64
@@ -249,7 +250,7 @@ type rateLimiter struct {
 }
 
 //nolint:unused
-func (rt *rateLimiter) getClient(key string) (*fixedWindow, bool) {
+func (rt *rateLimiter) getClient(key string) (*rateClient, bool) {
 	rt.RLock()
 	client, ok := rt.clients[key]
 	rt.RUnlock()
@@ -268,7 +269,7 @@ func (rt *rateLimiter) isAllowed(key string) bool {
 		// check again in case the client was added by another request
 		client, ok = rt.clients[key]
 		if !ok {
-			client = newFixedWindow(rt.maxAllowed, rt.interval)
+			client = newRateClient(rt.maxAllowed, rt.interval)
 			rt.clients[key] = client
 		}
 		rt.Unlock()
@@ -294,7 +295,7 @@ func (rt *rateLimiter) clean() {
 	//
 	// @todo remove after https://github.com/golang/go/issues/20135
 	if rt.totalDeleted >= 300 {
-		shrunk := make(map[string]*fixedWindow, len(rt.clients))
+		shrunk := make(map[string]*rateClient, len(rt.clients))
 		for k, v := range rt.clients {
 			shrunk[k] = v
 		}
@@ -303,14 +304,20 @@ func (rt *rateLimiter) clean() {
 	}
 }
 
-func newFixedWindow(maxAllowed int, intervalInSec int64) *fixedWindow {
-	return &fixedWindow{
+func newRateClient(maxAllowed int, intervalInSec int64) *rateClient {
+	return &rateClient{
 		maxAllowed: maxAllowed,
 		interval:   intervalInSec,
 	}
 }
 
-type fixedWindow struct {
+// @todo evaluate swiching to a more traditional fixed window or sliding window counter
+// implementations since some users complained that it is not intuitive (see #7329).
+//
+// rateClient is a mixture of token bucket and fixed window rate limit strategies
+// that refills the allowance only after at least "interval" seconds
+// has elapsed since the last request.
+type rateClient struct {
 	// use plain Mutex instead of RWMutex since the operations are expected
 	// to be mostly writes (e.g. consume()) and it should perform better
 	sync.Mutex
@@ -323,18 +330,18 @@ type fixedWindow struct {
 
 // hasExpired checks whether it has been at least minElapsed seconds since the lastConsume time.
 // (usually used to perform periodic cleanup of staled instances).
-func (l *fixedWindow) hasExpired(relativeNow int64, minElapsed int64) bool {
+func (l *rateClient) hasExpired(relativeNow int64, minElapsed int64) bool {
 	l.Lock()
 	defer l.Unlock()
 
 	return relativeNow-l.lastConsume > minElapsed
 }
 
-// consume decrease the current window allowance with 1 (if not exhausted already).
+// consume decreases the current allowance with 1 (if not exhausted already).
 //
 // It returns false if the allowance has been already exhausted and the user
 // has to wait until it resets back to its maxAllowed value.
-func (l *fixedWindow) consume() bool {
+func (l *rateClient) consume() bool {
 	l.Lock()
 	defer l.Unlock()
 

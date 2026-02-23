@@ -92,7 +92,7 @@ _For more details please refer to [Extend with Go](https://pocketbase.io/docs/go
 
 To build the minimal standalone executable, like the prebuilt ones in the releases page, you can simply run `go build` inside the `examples/base` directory:
 
-0. [Install Go 1.23+](https://go.dev/doc/install) (_if you haven't already_)
+0. [Install Go 1.24+](https://go.dev/doc/install) (_if you haven't already_)
 1. Clone/download the repo
 2. Navigate to `examples/base`
 3. Run `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build`
@@ -110,9 +110,11 @@ linux   386
 linux   amd64
 linux   arm
 linux   arm64
+linux   loong64
 linux   ppc64le
 linux   riscv64
 linux   s390x
+windows 386
 windows amd64
 windows arm64
 ```

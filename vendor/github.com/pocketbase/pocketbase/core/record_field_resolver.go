@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/tools/inflector"
 	"github.com/pocketbase/pocketbase/tools/search"
 	"github.com/pocketbase/pocketbase/tools/security"
 	"github.com/pocketbase/pocketbase/tools/types"
@@ -17,10 +18,11 @@ import (
 
 // filter modifiers
 const (
-	eachModifier   string = "each"
-	issetModifier  string = "isset"
-	lengthModifier string = "length"
-	lowerModifier  string = "lower"
+	eachModifier    string = "each"
+	issetModifier   string = "isset"
+	lengthModifier  string = "length"
+	lowerModifier   string = "lower"
+	changedModifier string = "changed"
 )
 
 // ensure that `search.FieldResolver` interface is implemented
@@ -46,8 +48,12 @@ type RecordFieldResolver struct {
 	requestInfo       *RequestInfo
 	staticRequestInfo map[string]any
 	allowedFields     []string
-	joins             []*join
+	joins             []*search.Join
 	allowHiddenFields bool
+	// ---
+	listRuleJoins       map[string]*Collection // tableAlias->collection
+	joinAliasSuffix     string                 // used for uniqueness in the flatten collection list rule join
+	baseCollectionAlias string
 }
 
 // AllowedFields returns a copy of the resolver's allowed fields.
@@ -82,7 +88,7 @@ func NewRecordFieldResolver(
 		baseCollection:    baseCollection,
 		requestInfo:       requestInfo,
 		allowHiddenFields: allowHiddenFields, // note: it is not based only on the requestInfo.auth since it could be used by a non-request internal method
-		joins:             []*join{},
+		joins:             []*search.Join{},
 		allowedFields: []string{
 			`^\w+[\w\.\:]*$`,
 			`^\@request\.context$`,
@@ -115,23 +121,141 @@ func NewRecordFieldResolver(
 	return r
 }
 
+// @todo think of a better a way how to call it automatically after BuildExpr
+//
 // UpdateQuery implements `search.FieldResolver` interface.
 //
 // Conditionally updates the provided search query based on the
 // resolved fields (eg. dynamically joining relations).
 func (r *RecordFieldResolver) UpdateQuery(query *dbx.SelectQuery) error {
 	if len(r.joins) > 0 {
-		query.Distinct(true)
+		r.updateQueryWithDeduplicateConstraint(query)
 
 		for _, join := range r.joins {
 			query.LeftJoin(
-				(join.tableName + " " + join.tableAlias),
-				join.on,
+				(join.TableName + " " + join.TableAlias),
+				join.On,
+			)
+		}
+	}
+
+	// note: for now the joins are not applied for multi-match conditions to avoid excessive checks
+	if len(r.listRuleJoins) > 0 {
+		for alias, c := range r.listRuleJoins {
+			err := r.updateQueryWithCollectionListRule(c, alias, query)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (r *RecordFieldResolver) updateQueryWithCollectionListRule(c *Collection, tableAlias string, query *dbx.SelectQuery) error {
+	if r.allowHiddenFields || c == nil || c.ListRule == nil || *c.ListRule == "" {
+		return nil
+	}
+
+	cloneR := *r
+	cloneR.joins = []*search.Join{}
+	cloneR.baseCollection = c
+	cloneR.baseCollectionAlias = tableAlias
+	cloneR.allowHiddenFields = true
+	cloneR.joinAliasSuffix = security.PseudorandomString(8)
+
+	expr, err := search.FilterData(*c.ListRule).BuildExpr(&cloneR)
+	if err != nil {
+		return fmt.Errorf("to buld %q list rule join subquery filter expression: %w", c.Name, err)
+	}
+
+	query.AndWhere(expr)
+
+	if len(cloneR.joins) > 0 {
+		r.updateQueryWithDeduplicateConstraint(query)
+
+		for _, j := range cloneR.joins {
+			query.LeftJoin(
+				(j.TableName + " " + j.TableAlias),
+				j.On,
 			)
 		}
 	}
 
 	return nil
+}
+
+func (r *RecordFieldResolver) updateQueryWithDeduplicateConstraint(query *dbx.SelectQuery) {
+	query.Distinct(true)
+
+	// @todo Research better options for generic rows deduplication.
+	//
+	// Disable the GROUP BY conditional checks for now since it prevents
+	// proper utilization of ORDER BY indexes (and maybe others)
+	// (https://github.com/pocketbase/pocketbase/discussions/7461)
+
+	// info := query.Info()
+	// if info.Distinct {
+	// 	return
+	// }
+
+	// // already has the group by registered
+	// var groupByCol = r.baseCollection.Name
+	// if r.baseCollectionAlias != "" {
+	// 	groupByCol = r.baseCollectionAlias
+	// }
+	// groupByCol += ".id"
+	// if len(info.GroupBy) > 0 && info.GroupBy[0] == groupByCol {
+	// 	return
+	// }
+
+	// // when deemed safe (GROUP BY could have different execution order compared to DISTINCT),
+	// // prefer GROUP BY to deduplicate only on the id field instead of all columns
+	// // so that the size of a single row wouldn't matter that much
+	// if preferGroupBy(info, groupByCol) {
+	// 	query.GroupBy(groupByCol)
+	// } else {
+	// 	query.Distinct(true)
+	// }
+}
+
+func preferGroupBy(info *dbx.QueryInfo, fullUnquotedGroupByCol string) bool {
+	if len(info.GroupBy) != 0 {
+		return false
+	}
+
+	if info.Having != nil {
+		return false
+	}
+
+	// dbx fallbacks to * if not set
+	if len(info.Selects) == 0 {
+		return true
+	}
+
+	if len(info.Selects) != 1 {
+		return false
+	}
+
+	identifier := info.Selects[0]
+
+	if identifier == "*" || identifier == fullUnquotedGroupByCol {
+		return true
+	}
+
+	// try again as direct col match in an unquoted column format
+	identifier = inflector.Columnify(identifier)
+	if identifier == fullUnquotedGroupByCol {
+		return true
+	}
+
+	// remains table.* to check
+	// (aliased columns for now are ignored as they could be represented by expressions)
+	if !strings.HasSuffix(identifier, ".*") {
+		return false
+	}
+
+	return strings.HasPrefix(fullUnquotedGroupByCol, strings.TrimSuffix(identifier, "*"))
 }
 
 // Resolve implements `search.FieldResolver` interface.
@@ -186,7 +310,7 @@ func (r *RecordFieldResolver) resolveStaticRequestField(path ...string) (*search
 
 	switch v := resultVal.(type) {
 	case nil:
-		return &search.ResolverResult{Identifier: "NULL"}, nil
+		// no further processing is needed...
 	case string:
 		// check if it is a number field and explicitly try to cast to
 		// float in case of a numeric string value was used
@@ -216,8 +340,20 @@ func (r *RecordFieldResolver) resolveStaticRequestField(path ...string) (*search
 		resultVal = val
 	}
 
-	placeholder := "f" + security.PseudorandomString(8)
+	// unsupported modifier
+	// @todo consider deprecating with the introduction of filter functions
+	if modifier != "" && modifier != lowerModifier {
+		return nil, fmt.Errorf("invalid modifier sequence %s:%s", lastProp, modifier)
+	}
 
+	// no need to wrap as placeholder if we already know that it is null
+	if resultVal == nil {
+		return &search.ResolverResult{Identifier: "NULL"}, nil
+	}
+
+	placeholder := "f" + security.PseudorandomString(10)
+
+	// @todo consider deprecating with the introduction of filter functions
 	if modifier == lowerModifier {
 		return &search.ResolverResult{
 			Identifier: "LOWER({:" + placeholder + "})",
@@ -239,23 +375,42 @@ func (r *RecordFieldResolver) loadCollection(collectionNameOrId string) (*Collec
 	return getCollectionByModelOrIdentifier(r.app, collectionNameOrId)
 }
 
-func (r *RecordFieldResolver) registerJoin(tableName string, tableAlias string, on dbx.Expression) {
-	join := &join{
-		tableName:  tableName,
-		tableAlias: tableAlias,
-		on:         on,
+func (r *RecordFieldResolver) registerJoin(tableName string, tableAlias string, on dbx.Expression) error {
+	newJoin := &search.Join{
+		TableName:  tableName,
+		TableAlias: tableAlias,
+		On:         on,
+	}
+
+	// (see updateQueryWithCollectionListRule)
+	if !r.allowHiddenFields {
+		c, _ := r.loadCollection(tableName)
+
+		// ignore non-collections since the table name could be an expression (e.g. json) or some other subquery
+		if c != nil {
+			// treat all fields as if they are hidden
+			if c.ListRule == nil {
+				return fmt.Errorf("%q fields can be accessed only when allowHiddenFields is enabled or by superusers", c.Name)
+			}
+
+			if r.listRuleJoins == nil {
+				r.listRuleJoins = map[string]*Collection{}
+			}
+			r.listRuleJoins[newJoin.TableAlias] = c
+		}
 	}
 
 	// replace existing join
 	for i, j := range r.joins {
-		if j.tableAlias == join.tableAlias {
-			r.joins[i] = join
-			return
+		if j.TableAlias == newJoin.TableAlias {
+			r.joins[i] = newJoin
+			return nil
 		}
 	}
 
 	// register new join
-	r.joins = append(r.joins, join)
+	r.joins = append(r.joins, newJoin)
+	return nil
 }
 
 type mapExtractor interface {
@@ -395,7 +550,8 @@ func splitModifier(combined string) (string, string, error) {
 	case issetModifier,
 		eachModifier,
 		lengthModifier,
-		lowerModifier:
+		lowerModifier,
+		changedModifier:
 		return parts[0], parts[1], nil
 	}
 

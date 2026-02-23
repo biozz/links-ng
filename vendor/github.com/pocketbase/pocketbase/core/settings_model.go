@@ -423,7 +423,7 @@ type BatchConfig struct {
 	// MaxRequests is the maximum allowed batch request to execute.
 	MaxRequests int `form:"maxRequests" json:"maxRequests"`
 
-	// Timeout is the the max duration in seconds to wait before cancelling the batch transaction.
+	// Timeout is the max duration in seconds to wait before cancelling the batch transaction.
 	Timeout int64 `form:"timeout" json:"timeout"`
 
 	// MaxBodySize is the maximum allowed batch request body size in bytes.
@@ -449,7 +449,7 @@ type BackupsConfig struct {
 	// Leave it empty to disable the auto backups functionality.
 	Cron string `form:"cron" json:"cron"`
 
-	// CronMaxKeep is the the max number of cron generated backups to
+	// CronMaxKeep is the max number of cron generated backups to
 	// keep before removing older entries.
 	//
 	// This field works only when the cron config has valid cron expression.
@@ -676,8 +676,8 @@ type RateLimitRule struct {
 
 	// Audience specifies the auth group the rule should apply for:
 	//   - ""      - both guests and authenticated users (default)
-	//   - "guest" - only for guests
-	//   - "auth"  - only for authenticated users
+	//   - "@guest" - only for guests
+	//   - "@auth"  - only for authenticated users
 	Audience string `form:"audience" json:"audience"`
 
 	// Duration specifies the interval (in seconds) per which to reset
@@ -703,4 +703,14 @@ func (c RateLimitRule) Validate() error {
 // DurationTime returns the tag's Duration as [time.Duration].
 func (c RateLimitRule) DurationTime() time.Duration {
 	return time.Duration(c.Duration) * time.Second
+}
+
+// String returns a string representation of the rule.
+func (c RateLimitRule) String() string {
+	raw, err := json.Marshal(c)
+	if err != nil {
+		return c.Label // extremely rare case
+	}
+
+	return string(raw)
 }

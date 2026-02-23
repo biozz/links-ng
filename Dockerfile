@@ -1,10 +1,10 @@
-FROM golang:1.24.3-alpine as builder
+FROM golang:1.26.0-alpine as builder
 WORKDIR /app/
 COPY . .
 RUN CGO_ENABLED=0 go build -o bin/links main.go
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/links-arm64 .
 
-FROM alpine:3.20
+FROM alpine:3.23
 WORKDIR /app/
 COPY --from=builder /app/bin/links .
 COPY --from=builder /app/bin/links-arm64 .
